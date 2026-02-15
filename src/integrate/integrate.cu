@@ -321,6 +321,12 @@ void Integrate::compute2(
   }
 
   ensemble->compute2(time_step, group, box, atom, thermo);
+
+  // Apply shear deformation if active
+  if (shear_.is_active()) {
+    shear_.apply(box, atom.position_per_atom, shear_.get_strain_rate());
+    shear_.check_and_dump(box, atom.position_per_atom, atom.type);
+  }
 }
 
 // coding conventions:
@@ -1110,4 +1116,9 @@ void Integrate::parse_deform(const char** param, int num_param)
   if (deform_z) {
     printf("    apply strain in z direction.\n");
   }
+}
+
+void Integrate::parse_shear(const char** param, int num_param)
+{
+  shear_.parse(param, num_param);
 }

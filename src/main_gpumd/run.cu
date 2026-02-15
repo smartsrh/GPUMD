@@ -19,8 +19,8 @@ Run simulation according to the inputs in the run.in file.
 
 #include "add_efield.cuh"
 #include "add_force.cuh"
-#include "add_spring.cuh"
 #include "add_random_force.cuh"
+#include "aqs_shear/aqs_shear.cuh"
 #include "cohesive.cuh"
 #include "electron_stop.cuh"
 #include "force/force.cuh"
@@ -37,6 +37,7 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/dump_exyz.cuh"
 #include "measure/dump_force.cuh"
 #include "measure/dump_netcdf.cuh"
+#include "measure/dump_stress.cuh"
 #include "measure/dump_observer.cuh"
 #include "measure/dump_polarizability.cuh"
 #include "measure/dump_position.cuh"
@@ -45,7 +46,6 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/dump_thermo.cuh"
 #include "measure/dump_velocity.cuh"
 #include "measure/dump_xyz.cuh"
-#include "measure/dump_cg.cuh"
 #include "measure/extrapolation.cuh"
 #include "measure/hac.cuh"
 #include "measure/hnemd_kappa.cuh"
@@ -62,9 +62,12 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/shc.cuh"
 #include "measure/viscosity.cuh"
 #include "minimize/minimize.cuh"
+#include "shear/shear.cuh"
 #include "model/box.cuh"
 #include "model/read_xyz.cuh"
 #include "phonon/hessian.cuh"
+#include "phonon/dynamical_matrix.cuh"
+#include "phonon/local_dynamical_matrix.cuh"
 #include "replicate.cuh"
 #include "run.cuh"
 #include "utilities/error.cuh"
@@ -218,6 +221,8 @@ void Run::perform_a_run()
   mc.initialize();
   measure.initialize(number_of_steps, time_step, integrate, group, atom, box, force);
 
+  const auto time_begin = std::chrono::high_resolution_clock::now();
+
   // compute force for the first integrate step
   if (integrate.type >= 31) { // PIMD
     for (int k = 0; k < integrate.number_of_beads; ++k) {
@@ -246,8 +251,6 @@ void Run::perform_a_run()
   }
 
   double initial_time_step = time_step;
-
-  const auto time_begin = std::chrono::high_resolution_clock::now();
 
   for (int step = 0; step < number_of_steps; ++step) {
 
@@ -295,7 +298,6 @@ void Run::perform_a_run()
 
     electron_stop.compute(time_step, atom);
     add_force.compute(step, group, atom);
-    add_spring.compute(step, group, atom);
     add_random_force.compute(step, atom);
     add_efield.compute(step, group, atom, force);
 
@@ -337,7 +339,6 @@ void Run::perform_a_run()
 
   electron_stop.finalize();
   add_force.finalize();
-  add_spring.finalize();
   add_random_force.finalize();
   add_efield.finalize();
   integrate.finalize();
@@ -368,6 +369,7 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     minimize.parse_minimize(
       param,
       num_param,
+      integrate.fixed_group,
       force,
       box,
       atom.position_per_atom,
@@ -389,6 +391,34 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
       atom.potential_per_atom,
       atom.force_per_atom,
       atom.virial_per_atom);
+  } else if (strcmp(param[0], "compute_dynamical_matrix") == 0) {
+    DynamicalMatrix dynmat;
+    dynmat.parse(param, num_param);
+    dynmat.compute(
+      force,
+      box,
+      atom.cpu_position_per_atom,
+      atom.position_per_atom,
+      atom.type,
+      group,
+      atom.potential_per_atom,
+      atom.force_per_atom,
+      atom.virial_per_atom,
+      atom.mass);
+  } else if (strcmp(param[0], "compute_local_dynamical_matrix") == 0) {
+    LocalDynamicalMatrix local_dynmat;
+    local_dynmat.parse(param, num_param);
+    local_dynmat.compute(
+      force,
+      box,
+      atom.cpu_position_per_atom,
+      atom.position_per_atom,
+      atom.type,
+      group,
+      atom.potential_per_atom,
+      atom.force_per_atom,
+      atom.virial_per_atom,
+      atom.mass);
   } else if (strcmp(param[0], "compute_cohesive") == 0) {
     Cohesive cohesive;
     cohesive.parse(param, num_param, 0);
@@ -467,10 +497,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     std::unique_ptr<Property> property;
     property.reset(new Dump_XYZ(param, num_param, group, atom));
     measure.properties.emplace_back(std::move(property));
-  } else if (strcmp(param[0], "dump_cg") == 0) {
-    std::unique_ptr<Property> property;
-    property.reset(new Dump_CG(param, num_param, group));
-    measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "dump_beads") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new Dump_Beads(param, num_param));
@@ -490,6 +516,10 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
   } else if (strcmp(param[0], "dump_polarizability") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new Dump_Polarizability(param, num_param));
+    measure.properties.emplace_back(std::move(property));
+  } else if (strcmp(param[0], "dump_stress") == 0) {
+    std::unique_ptr<Property> property;
+    property.reset(new Dump_Stress(param, num_param));
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "active") == 0) {
     std::unique_ptr<Property> property;
@@ -513,7 +543,7 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "compute_rdf") == 0) {
     std::unique_ptr<Property> property;
-    property.reset(new RDF(param, num_param, box, number_of_types, number_of_steps));
+    property.reset(new RDF(param, num_param, box, atom.cpu_type_size, number_of_steps));
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "compute_adf") == 0) {
     std::unique_ptr<Property> property;
@@ -575,8 +605,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     add_random_force.parse(param, num_param, atom.number_of_atoms);
   } else if (strcmp(param[0], "add_force") == 0) {
     add_force.parse(param, num_param, group);
-  } else if (strcmp(param[0], "add_spring") == 0) {
-    add_spring.parse(param, num_param, group, atom);
   } else if (strcmp(param[0], "add_efield") == 0) {
     add_efield.parse(param, num_param, group);
   } else if (strcmp(param[0], "mc") == 0) {
@@ -589,6 +617,20 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     std::unique_ptr<Property> property;
     property.reset(new LSQT(param, num_param));
     measure.properties.emplace_back(std::move(property));
+  } else if (strcmp(param[0], "aqsShear") == 0) {
+    AQSShear aqs_shear;
+    aqs_shear.parse(param, num_param);
+    aqs_shear.compute(
+      force,
+      box,
+      atom.position_per_atom,
+      atom.type,
+      group,
+      atom.potential_per_atom,
+      atom.force_per_atom,
+      atom.virial_per_atom);
+  } else if (strcmp(param[0], "shear") == 0) {
+    integrate.parse_shear(param, num_param);
   } else if (strcmp(param[0], "run") == 0) {
     parse_run(param, num_param);
   } else {

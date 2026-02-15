@@ -18,6 +18,7 @@
 #include "ensemble.cuh"
 #include "model/box.cuh"
 #include "model/group.cuh"
+#include "shear/shear.cuh"
 #include <memory>
 #include <vector>
 
@@ -65,6 +66,7 @@ public:
     std::vector<Group>& group,
     GPU_Vector<double>& thermo);
   void parse_deform(const char**, int);
+  void parse_shear(const char**, int);
   void parse_fix(const char**, int, std::vector<Group>& group);
   void parse_move(const char**, int, std::vector<Group>& group);
 
@@ -90,6 +92,8 @@ public:
   int deform_y = 0;
   int deform_z = 0;
   double deform_rate[3];
+  
+  Shear shear_;
 
   // PIMD
   int number_of_beads;

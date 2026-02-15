@@ -15,7 +15,7 @@
 # some flags
 ###########################################################
 CC = nvcc
-CUDA_ARCH=-arch=sm_60
+CUDA_ARCH=-arch=sm_89
 ifdef OS # For Windows with the cl.exe compiler
 CFLAGS = -O3 $(CUDA_ARCH)
 else # For linux
@@ -32,6 +32,8 @@ LIBS = -lcublas -lcusolver -lcufft
 SOURCES_GPUMD =                   \
 	$(wildcard main_gpumd/*.cu)   \
 	$(wildcard minimize/*.cu)     \
+	$(wildcard aqs_shear/*.cu)    \
+	$(wildcard shear/*.cu)        \
 	$(wildcard phonon/*.cu)       \
 	$(wildcard integrate/*.cu)    \
 	$(wildcard mc/*.cu)           \
@@ -70,6 +72,7 @@ HEADERS =                         \
 	$(wildcard integrate/*.cuh)   \
 	$(wildcard mc/*.cuh)          \
 	$(wildcard minimize/*.cuh)    \
+	$(wildcard aqs_shear/*.cuh)   \
 	$(wildcard force/*.cuh)       \
 	$(wildcard measure/*.cuh)     \
 	$(wildcard model/*.cuh)       \
@@ -105,6 +108,8 @@ gnep: $(OBJ_GNEP)
 ifdef OS # for Windows
 integrate/%.obj: integrate/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+aqs_shear/%.obj: aqs_shear/%.cu $(HEADERS)
+	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 mc/%.obj: mc/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 minimize/%.obj: minimize/%.cu $(HEADERS)
@@ -127,6 +132,10 @@ main_gnep/%.obj: main_gnep/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 else # for Linux
 integrate/%.o: integrate/%.cu $(HEADERS)
+	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+aqs_shear/%.o: aqs_shear/%.cu $(HEADERS)
+	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+shear/%.o: shear/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 mc/%.o: mc/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
