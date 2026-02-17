@@ -34,7 +34,6 @@ SOURCES_GPUMD =                   \
 	$(wildcard minimize/*.cu)     \
 	$(wildcard aqs_shear/*.cu)    \
 	$(wildcard shear/*.cu)        \
-t$(wildcard kmc_diffusion/*.cu)   \
 	$(wildcard phonon/*.cu)       \
 	$(wildcard integrate/*.cu)    \
 	$(wildcard mc/*.cu)           \
@@ -135,8 +134,6 @@ else # for Linux
 integrate/%.o: integrate/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 aqs_shear/%.o: aqs_shear/%.cu $(HEADERS)
-	$(CC) $(CFLAGS) $(INC) -c $< -o $@
-kmc_diffusion/%.o: kmc_diffusion/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 shear/%.o: shear/%.cu $(HEADERS)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@

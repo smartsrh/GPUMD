@@ -63,7 +63,6 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/viscosity.cuh"
 #include "minimize/minimize.cuh"
 #include "shear/shear.cuh"
-#include "kmc_diffusion/kmc_diffusion.cuh"
 #include "model/box.cuh"
 #include "model/read_xyz.cuh"
 #include "phonon/hessian.cuh"
@@ -637,10 +636,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
   } else {
     PRINT_KEYWORD_ERROR(param[0]);
   }
-  } else if (strcmp(param[0], "kmc_diffusion") == 0) {
-    KMCDiffusion kmc;
-    kmc.parse(param, num_param);
-    kmc.compute();
 }
 
 void Run::parse_velocity(const char** param, int num_param)
