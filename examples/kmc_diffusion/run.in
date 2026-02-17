@@ -1,0 +1,14 @@
+# Example: KMC diffusion simulation
+# Simulate Zr and Cr diffusion in Cu at 800K
+
+# Load potential
+potential ../../potentials/nep/Cu-Zr-Cr-S-nep.txt
+
+# Load structure (Cu + Zr + Cr)
+# model.xyz should contain Cu matrix with Zr and Cr solutes
+
+# Run KMC diffusion
+kmc_diffusion 800 1e-6
+
+# Or with custom parameter file:
+# kmc_diffusion 800 1e-6 my_params.txt
