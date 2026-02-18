@@ -333,7 +333,7 @@ void AQSShear::minimize_energy(
   const int number_of_atoms = type.size();
   
   if (params_.minimizer == MinimizerType::SD) {
-    Minimizer_SD minimizer(-1, number_of_atoms, params_.max_minimize_steps, params_.force_tolerance);
+    Minimizer_SD minimizer(number_of_atoms, params_.max_minimize_steps, params_.force_tolerance);
     minimizer.compute(
       force, box, position_per_atom, type, group,
       potential_per_atom, force_per_atom, virial_per_atom);
