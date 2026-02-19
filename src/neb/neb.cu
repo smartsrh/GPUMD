@@ -494,6 +494,16 @@ void NEB::parse_neb(
       if (f_norm > max_force) {
         max_force = f_norm;
       }
+      
+      // Update positions using steepest descent (NEB fix)
+      const double dt = 0.01;  // Time step for position update
+      const int num_elements = number_of_atoms * 3;
+      double* positions = &h_positions_all_[replica * num_elements];
+      double* forces = &h_forces_all_[replica * num_elements];
+      
+      for (int i = 0; i < num_elements; ++i) {
+        positions[i] += dt * forces[i];
+      }
     }
     
     // Output progress
@@ -534,6 +544,15 @@ void NEB::parse_neb(
         double f_norm = compute_force_norm(replica, number_of_atoms);
         if (f_norm > max_force) {
           max_force = f_norm;
+
+        // Update positions using steepest descent (NEB fix)
+        const double dt = 0.01;  // Time step for position update
+        const int num_elements = number_of_atoms * 3;
+        double* positions = &h_positions_all_[replica * num_elements];
+        double* forces = &h_forces_all_[replica * num_elements];
+        for (int i = 0; i < num_elements; ++i) {
+          positions[i] += dt * forces[i];
+        }
         }
       }
       

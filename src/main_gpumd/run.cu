@@ -18,6 +18,7 @@ Run simulation according to the inputs in the run.in file.
 ------------------------------------------------------------------------------*/
 
 #include "add_efield.cuh"
+#include "neb/neb.cuh"
 #include "add_force.cuh"
 #include "add_spring.cuh"
 #include "add_random_force.cuh"
@@ -586,6 +587,11 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     // nothing here; will be handled elsewhere
   } else if (strcmp(param[0], "dftd3") == 0) {
     // nothing here; will be handled elsewhere
+  } else if (strcmp(param[0], "neb") == 0) {
+    NEB neb;
+    neb.parse_neb(
+      param, num_param, force, box, atom.position_per_atom, atom.type,
+      group, atom.potential_per_atom, atom.force_per_atom, atom.virial_per_atom);
   } else if (strcmp(param[0], "compute_lsqt") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new LSQT(param, num_param));
