@@ -1,0 +1,23 @@
+# NEB test example for GPUMD
+# This example demonstrates the NEB (Nudged Elastic Band) method
+# for finding transition states and minimum energy paths
+
+# Load the potential
+potential nep89.txt
+
+# Run NEB calculation
+# Syntax: neb <nreplica> <etol> <ftol> <n1steps> <n2steps> <nevery> [keywords]
+#   nreplica: number of replicas (images) along the path (minimum 3)
+#   etol: energy tolerance for convergence (eV)
+#   ftol: force tolerance for convergence (eV/Angstrom)
+#   n1steps: maximum steps for regular NEB stage
+#   n2steps: maximum steps for climbing NEB stage (0 to skip)
+#   nevery: output frequency
+# Optional keywords:
+#   spring <value>: spring constant (default 1.0 eV/Angstrom^2)
+#   final <filename>: final configuration file (required)
+#   free_end_ini: free end for initial replica
+#   free_end_final: free end for final replica
+#   mode <neighbor|ideal|equal>: NEB mode
+
+neb 7 1.0e-6 1.0e-4 1000 1000 10 final final.xyz spring 5.0

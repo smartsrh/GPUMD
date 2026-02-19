@@ -1,0 +1,6 @@
+# Add NEB to SOURCES_GPUMD after kmc_diffusion
+SOURCES_GPUMD += $(wildcard neb/*.cu)
+
+# Add NEB compilation rule
+neb/%.o: neb/%.cu $(HEADERS)
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@

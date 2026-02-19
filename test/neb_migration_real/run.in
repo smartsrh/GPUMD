@@ -1,0 +1,7 @@
+potential nep89.txt
+velocity 300
+
+# NEB calculation for vacancy migration in Cu
+# 255 atoms with 1 vacancy
+# 7 replicas for the migration path
+neb 7 1.0e-6 1.0e-3 500 500 50 final final.xyz spring 5.0

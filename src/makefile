@@ -33,6 +33,7 @@ SOURCES_GPUMD =                   \
 	$(wildcard main_gpumd/*.cu)   \
 	$(wildcard minimize/*.cu)     \
 	$(wildcard phonon/*.cu)       \
+	$(wildcard neb/*.cu)          \
 	$(wildcard integrate/*.cu)    \
 	$(wildcard mc/*.cu)           \
 	$(wildcard force/*.cu)        \
@@ -160,4 +161,5 @@ ifdef OS
 else
 	rm -f */*.o gpumd nep gnep
 endif
+
 

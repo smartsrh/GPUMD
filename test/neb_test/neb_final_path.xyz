@@ -1,0 +1,28 @@
+2
+Replica 1 Energy = 0 eV
+X 0 1.8 0
+X 1.8 0 0
+2
+Replica 2 Energy = -3.33665 eV
+X 0 1.5 0
+X 1.83333 0 0
+2
+Replica 3 Energy = -3.24128 eV
+X 0 1.2 0
+X 1.86667 0 0
+2
+Replica 4 Energy = -3.04289 eV
+X 0 0.9 0
+X 1.9 0 0
+2
+Replica 5 Energy = -2.83916 eV
+X 0 0.6 0
+X 1.93333 0 0
+2
+Replica 6 Energy = -2.73179 eV
+X 0 0.3 0
+X 1.96667 0 0
+2
+Replica 7 Energy = 0 eV
+X 0 0 0
+X 2 0 0

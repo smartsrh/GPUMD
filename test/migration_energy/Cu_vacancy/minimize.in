@@ -1,0 +1,5 @@
+potential nep89.txt
+velocity 300
+
+# Minimize initial state
+minimize sd 1000 1.0e-5

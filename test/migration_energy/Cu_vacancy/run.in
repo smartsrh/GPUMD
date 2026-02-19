@@ -1,0 +1,6 @@
+potential nep89.txt
+velocity 300
+
+# NEB with conservative parameters
+# More replicas, smaller spring constant, tighter convergence
+neb 11 1.0e-6 1.0e-2 2000 2000 200 final final.xyz spring 1.0

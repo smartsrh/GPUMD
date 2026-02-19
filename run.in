@@ -1,0 +1,6 @@
+potential nep89.txt
+velocity 300
+
+# NEB for Cu vacancy migration
+# 7 replicas, tight convergence
+neb 7 1.0e-6 1.0e-3 1000 1000 100 final final.xyz spring 5.0
