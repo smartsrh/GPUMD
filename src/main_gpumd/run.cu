@@ -370,6 +370,7 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     minimize.parse_minimize(
       param,
       num_param,
+      integrate.fixed_group,
       force,
       box,
       atom.position_per_atom,
@@ -543,7 +544,7 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "compute_rdf") == 0) {
     std::unique_ptr<Property> property;
-    property.reset(new RDF(param, num_param, box, number_of_types, number_of_steps));
+    property.reset(new RDF(param, num_param, box, atom.cpu_type_size, number_of_steps));
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "compute_adf") == 0) {
     std::unique_ptr<Property> property;
