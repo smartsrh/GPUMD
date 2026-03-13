@@ -1,0 +1,10 @@
+# KMC Diffusion Parameters
+# Format: species Ef(eV) Em(eV) [mass(amu)]
+# 
+# Ef: Vacancy formation energy
+# Em: Migration energy
+# mass: Atomic mass (optional)
+#
+# For Cu-Zr-Cr-S system
+Zr    1.35    1.8    91.22
+Cr    1.55    0.8    52.00
