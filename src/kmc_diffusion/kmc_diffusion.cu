@@ -33,7 +33,7 @@ KMCDiffusion::~KMCDiffusion(void)
     if (msd_per_solute) delete[] msd_per_solute;
 }
 
-void KMCDiffusion::parse(char **param, int num_param)
+void KMCDiffusion::parse(const char **param, int num_param)
 {
     /*
     解析命令参数

@@ -1120,5 +1120,11 @@ void Integrate::parse_deform(const char** param, int num_param)
 
 void Integrate::parse_shear(const char** param, int num_param)
 {
+  // Recommended usage: NVT/NPT families for temperature-controlled shear.
+  // We keep it as warning (not hard error) to preserve backward compatibility.
+  bool looks_like_nvt_or_npt = (type >= 1 && type <= 20);
+  if (!looks_like_nvt_or_npt) {
+    printf("Warning: shear is typically used with NVT/NPT ensembles; current type=%d.\n", type);
+  }
   shear_.parse(param, num_param);
 }

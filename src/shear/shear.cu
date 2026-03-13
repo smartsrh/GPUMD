@@ -250,16 +250,18 @@ void Shear::dump_structure(
   
   for (int n = 0; n < N; ++n) {
     int atom_type = type_cpu[n];
-    const char* symbol = (atom_type == 0) ? "Cu" : "Zr";
-    
+    char symbol[16];
+    // Generic, PR-friendly output: do not hardcode Cu/Zr
+    snprintf(symbol, sizeof(symbol), "T%d", atom_type);
+
     fprintf(fid, "%s %.10f %.10f %.10f\n",
       symbol,
       pos_cpu[n],
       pos_cpu[n + N],
       pos_cpu[n + 2 * N]);
   }
-  
+
   fclose(fid);
-  double strain_pct = step * strain_rate_ * 100;
+  double strain_pct = step * strain_rate_ * strain_sign_ * 100.0;
   printf("    Shear: Saved %s (step %d, strain %.2f%%)\n", filename, step, strain_pct);
 }

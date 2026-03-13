@@ -55,7 +55,7 @@ public:
     KMCDiffusion(void);
     ~KMCDiffusion(void);
     
-    void parse(char **param, int num_param);
+    void parse(const char **param, int num_param);
     void compute(void);
     
 private:

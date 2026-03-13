@@ -34,7 +34,7 @@ SOURCES_GPUMD =                   \
 	$(wildcard minimize/*.cu)     \
 	$(wildcard aqs_shear/*.cu)    \
 	$(wildcard shear/*.cu)        \
-t$(wildcard kmc_diffusion/*.cu)   \
+	$(wildcard kmc_diffusion/*.cu)   \
 	$(wildcard phonon/*.cu)       \
 	$(wildcard integrate/*.cu)    \
 	$(wildcard mc/*.cu)           \

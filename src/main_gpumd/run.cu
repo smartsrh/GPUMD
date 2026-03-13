@@ -632,15 +632,15 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
       atom.virial_per_atom);
   } else if (strcmp(param[0], "shear") == 0) {
     integrate.parse_shear(param, num_param);
+  } else if (strcmp(param[0], "kmc_diffusion") == 0) {
+    KMCDiffusion kmc;
+    kmc.parse(param, num_param);
+    kmc.compute();
   } else if (strcmp(param[0], "run") == 0) {
     parse_run(param, num_param);
   } else {
     PRINT_KEYWORD_ERROR(param[0]);
   }
-  } else if (strcmp(param[0], "kmc_diffusion") == 0) {
-    KMCDiffusion kmc;
-    kmc.parse(param, num_param);
-    kmc.compute();
 }
 
 void Run::parse_velocity(const char** param, int num_param)
