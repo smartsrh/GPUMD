@@ -19,8 +19,8 @@ Run simulation according to the inputs in the run.in file.
 
 #include "add_efield.cuh"
 #include "add_force.cuh"
+#include "add_spring.cuh"
 #include "add_random_force.cuh"
-#include "aqs_shear/aqs_shear.cuh"
 #include "cohesive.cuh"
 #include "electron_stop.cuh"
 #include "force/force.cuh"
@@ -30,7 +30,6 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/adf.cuh"
 #include "measure/angular_rdf.cuh"
 #include "measure/compute.cuh"
-#include "measure/compute_chunk.cuh"
 #include "measure/compute_dpdt.cuh"
 #include "measure/dos.cuh"
 #include "measure/dump_beads.cuh"
@@ -38,7 +37,6 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/dump_exyz.cuh"
 #include "measure/dump_force.cuh"
 #include "measure/dump_netcdf.cuh"
-#include "measure/dump_stress.cuh"
 #include "measure/dump_observer.cuh"
 #include "measure/dump_polarizability.cuh"
 #include "measure/dump_position.cuh"
@@ -47,6 +45,7 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/dump_thermo.cuh"
 #include "measure/dump_velocity.cuh"
 #include "measure/dump_xyz.cuh"
+#include "measure/dump_cg.cuh"
 #include "measure/extrapolation.cuh"
 #include "measure/hac.cuh"
 #include "measure/hnemd_kappa.cuh"
@@ -63,19 +62,16 @@ Run simulation according to the inputs in the run.in file.
 #include "measure/shc.cuh"
 #include "measure/viscosity.cuh"
 #include "minimize/minimize.cuh"
-#include "shear/shear.cuh"
-#include "kmc_diffusion/kmc_diffusion.cuh"
 #include "model/box.cuh"
 #include "model/read_xyz.cuh"
 #include "phonon/hessian.cuh"
-#include "phonon/dynamical_matrix.cuh"
-#include "phonon/local_dynamical_matrix.cuh"
 #include "replicate.cuh"
 #include "run.cuh"
 #include "utilities/error.cuh"
 #include "utilities/gpu_macro.cuh"
 #include "utilities/read_file.cuh"
 #include "velocity.cuh"
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 
@@ -147,8 +143,11 @@ static void calculate_time_step(
   }
 }
 
-Run::Run()
+Run::Run(bool skip_run, const std::string& run_input_path)
 {
+  skip_run_commands = skip_run;
+  run_input_file = run_input_path;
+
   print_line_1();
   printf("Started initializing positions and related parameters.\n");
   fflush(stdout);
@@ -184,13 +183,13 @@ Run::Run()
 void Run::execute_run_in()
 {
   print_line_1();
-  printf("Started executing the commands in run.in.\n");
+  printf("Started executing the commands in %s.\n", run_input_file.c_str());
   fflush(stdout);
   print_line_2();
 
-  std::ifstream input("run.in");
+  std::ifstream input(run_input_file);
   if (!input.is_open()) {
-    std::cout << "Failed to open run.in." << std::endl;
+    std::cout << "Failed to open " << run_input_file << "." << std::endl;
     exit(1);
   }
 
@@ -223,8 +222,6 @@ void Run::perform_a_run()
   mc.initialize();
   measure.initialize(number_of_steps, time_step, integrate, group, atom, box, force);
 
-  const auto time_begin = std::chrono::high_resolution_clock::now();
-
   // compute force for the first integrate step
   if (integrate.type >= 31) { // PIMD
     for (int k = 0; k < integrate.number_of_beads; ++k) {
@@ -253,6 +250,8 @@ void Run::perform_a_run()
   }
 
   double initial_time_step = time_step;
+
+  const auto time_begin = std::chrono::high_resolution_clock::now();
 
   for (int step = 0; step < number_of_steps; ++step) {
 
@@ -300,6 +299,7 @@ void Run::perform_a_run()
 
     electron_stop.compute(time_step, atom);
     add_force.compute(step, group, atom);
+    add_spring.compute(step, group, atom);
     add_random_force.compute(step, atom);
     add_efield.compute(step, group, atom, force);
 
@@ -341,6 +341,7 @@ void Run::perform_a_run()
 
   electron_stop.finalize();
   add_force.finalize();
+  add_spring.finalize();
   add_random_force.finalize();
   add_efield.finalize();
   integrate.finalize();
@@ -348,6 +349,208 @@ void Run::perform_a_run()
   velocity.finalize();
   force.finalize();
   max_distance_per_step = 0.0;
+}
+
+// MDI helper implementations
+int Run::mdi_get_natoms() { return atom.number_of_atoms; }
+
+void Run::mdi_get_positions(std::vector<double>& out_positions)
+{
+  const int N = atom.number_of_atoms;
+  out_positions.resize(N * 3);
+  atom.position_per_atom.copy_to_host(out_positions.data());
+}
+
+void Run::mdi_set_positions(const double* positions)
+{
+  const int N = atom.number_of_atoms;
+  atom.position_per_atom.copy_from_host(positions, N * 3);
+}
+
+void Run::mdi_compute_forces()
+{
+  if (integrate.type >= 31) { // PIMD
+    for (int k = 0; k < integrate.number_of_beads; ++k) {
+      force.compute(
+        box,
+        atom.position_beads[k],
+        atom.type,
+        group,
+        atom.potential_beads[k],
+        atom.force_beads[k],
+        atom.virial_beads[k],
+        atom.velocity_beads[k],
+        atom.mass);
+    }
+  } else {
+    force.compute(
+      box,
+      atom.position_per_atom,
+      atom.type,
+      group,
+      atom.potential_per_atom,
+      atom.force_per_atom,
+      atom.virial_per_atom,
+      atom.velocity_per_atom,
+      atom.mass);
+  }
+}
+
+void Run::mdi_get_forces(std::vector<double>& out_forces)
+{
+  const int N = atom.number_of_atoms;
+  out_forces.resize(N * 3);
+  atom.force_per_atom.copy_to_host(out_forces.data());
+}
+
+void Run::mdi_get_potential(std::vector<double>& out_potential)
+{
+  const int N = atom.number_of_atoms;
+  out_potential.resize(N);
+  atom.potential_per_atom.copy_to_host(out_potential.data());
+}
+
+void Run::mdi_set_forces(const double* forces)
+{
+  /* Set external forces from QM code (e.g., VASP) into GPUMD */
+  const int N = atom.number_of_atoms;
+  /* Copy forces from host to device GPU memory */
+  atom.force_per_atom.copy_from_host(forces, (size_t)(N * 3));
+  /* mark that external forces should be used for the next integrate */
+  external_forces_pending = true;
+  printf("[MDI] Forces set from external QM calculation (external_forces_pending=1)\n");
+}
+
+void Run::mdi_set_energy(double energy)
+{
+  external_total_energy = energy;
+  external_energy_pending = true;
+}
+
+void Run::mdi_set_stress(const double* stress_3x3)
+{
+  for (int i = 0; i < 9; ++i) {
+    external_stress[i] = stress_3x3[i];
+  }
+  external_stress_pending = true;
+}
+
+void Run::mdi_initialize_for_mdi()
+{
+  // initialize integrator, mc, and measure for single-step operation
+  int one_steps = 1;
+  integrate.initialize(time_step, atom, box, group, thermo, one_steps);
+  mc.initialize();
+  measure.initialize(one_steps, time_step, integrate, group, atom, box, force);
+  // reset MDI step counter so dump intervals behave predictably
+  mdi_step_counter = 0;
+}
+
+void Run::mdi_finalize_for_mdi()
+{
+  measure.finalize(atom, box, integrate, 1, time_step, integrate.temperature2);
+  electron_stop.finalize();
+  add_force.finalize();
+  add_spring.finalize();
+  add_random_force.finalize();
+  add_efield.finalize();
+  integrate.finalize();
+  mc.finalize();
+  velocity.finalize();
+  force.finalize();
+}
+
+void Run::mdi_step_one()
+{
+  // Perform a single integration step similar to one iteration of perform_a_run(),
+  // so that output (e.g., dump_force -> force.out) continues to work in MDI mode.
+  //
+  // Notes:
+  // - We intentionally do not call the internal potential when external forces are provided.
+  // - measure.process is called every step, enabling dump_* keywords to write outputs.
+  velocity.correct_velocity(
+    mdi_step_counter,
+    group,
+    atom.cpu_mass,
+    atom.position_per_atom,
+    atom.cpu_position_per_atom,
+    atom.cpu_velocity_per_atom,
+    atom.velocity_per_atom);
+
+  integrate.current_step = mdi_step_counter;
+  global_time += time_step;
+
+  integrate.compute1(time_step, 0.0, group, box, atom, thermo);
+  // compute forces only if no external forces were provided by driver
+  if (!external_forces_pending) {
+    mdi_compute_forces();
+  } else {
+    /* use forces already present in atom.force_per_atom (set by mdi_set_forces) */
+    printf("[MDI] Using external forces for integration\n");
+  }
+
+  // Apply optional external energy/stress so GPUMD thermo/dump outputs remain consistent.
+  if (external_energy_pending) {
+    const int N = atom.number_of_atoms;
+    std::vector<double> potential_per_atom(N, external_total_energy / std::max(1, N));
+    atom.potential_per_atom.copy_from_host(potential_per_atom.data(), N);
+    external_energy_pending = false;
+  }
+  if (external_stress_pending) {
+    const int N = atom.number_of_atoms;
+    std::vector<double> virial_per_atom(N * 9, 0.0);
+    const double volume = box.get_volume();
+    const double per_atom = 1.0 / std::max(1, N);
+    // GPUMD uses virial convention with stress = -virial / V.
+    const double W_xx = -external_stress[0] * volume * per_atom;
+    const double W_yy = -external_stress[4] * volume * per_atom;
+    const double W_zz = -external_stress[8] * volume * per_atom;
+    const double W_xy = -external_stress[1] * volume * per_atom;
+    const double W_xz = -external_stress[2] * volume * per_atom;
+    const double W_yz = -external_stress[5] * volume * per_atom;
+    for (int i = 0; i < N; ++i) {
+      virial_per_atom[i] = W_xx;
+      virial_per_atom[N + i] = W_yy;
+      virial_per_atom[2 * N + i] = W_zz;
+      virial_per_atom[3 * N + i] = W_xy;
+      virial_per_atom[4 * N + i] = W_xz;
+      virial_per_atom[5 * N + i] = W_yz;
+      // keep full tensor symmetric for dump formats that use 9 components
+      virial_per_atom[6 * N + i] = W_xy;
+      virial_per_atom[7 * N + i] = W_xz;
+      virial_per_atom[8 * N + i] = W_yz;
+    }
+    atom.virial_per_atom.copy_from_host(virial_per_atom.data(), N * 9);
+    external_stress_pending = false;
+  }
+
+  electron_stop.compute(time_step, atom);
+  add_force.compute(mdi_step_counter, group, atom);
+  add_spring.compute(mdi_step_counter, group, atom);
+  add_random_force.compute(mdi_step_counter, atom);
+  add_efield.compute(mdi_step_counter, group, atom, force);
+
+  integrate.compute2(time_step, 0.0, group, box, atom, thermo, force);
+
+  // Keep MC / measure behavior consistent with normal runs (important for dump_* outputs)
+  mc.compute(mdi_step_counter, 1, atom, box, group);
+  measure.process(
+    1,
+    mdi_step_counter,
+    integrate.fixed_group,
+    integrate.move_group,
+    global_time,
+    integrate.temperature2,
+    integrate,
+    box,
+    group,
+    thermo,
+    atom,
+    force);
+
+  mdi_step_counter++;
+  /* clear external forces flag after integration */
+  external_forces_pending = false;
 }
 
 void Run::parse_one_keyword(std::vector<std::string>& tokens)
@@ -386,7 +589,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     hessian.compute(
       force,
       box,
-      atom.cpu_mass,
       atom.cpu_position_per_atom,
       atom.position_per_atom,
       atom.type,
@@ -394,34 +596,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
       atom.potential_per_atom,
       atom.force_per_atom,
       atom.virial_per_atom);
-  } else if (strcmp(param[0], "compute_dynamical_matrix") == 0) {
-    DynamicalMatrix dynmat;
-    dynmat.parse(param, num_param);
-    dynmat.compute(
-      force,
-      box,
-      atom.cpu_position_per_atom,
-      atom.position_per_atom,
-      atom.type,
-      group,
-      atom.potential_per_atom,
-      atom.force_per_atom,
-      atom.virial_per_atom,
-      atom.mass);
-  } else if (strcmp(param[0], "compute_local_dynamical_matrix") == 0) {
-    LocalDynamicalMatrix local_dynmat;
-    local_dynmat.parse(param, num_param);
-    local_dynmat.compute(
-      force,
-      box,
-      atom.cpu_position_per_atom,
-      atom.position_per_atom,
-      atom.type,
-      group,
-      atom.potential_per_atom,
-      atom.force_per_atom,
-      atom.virial_per_atom,
-      atom.mass);
   } else if (strcmp(param[0], "compute_cohesive") == 0) {
     Cohesive cohesive;
     cohesive.parse(param, num_param, 0);
@@ -500,6 +674,10 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     std::unique_ptr<Property> property;
     property.reset(new Dump_XYZ(param, num_param, group, atom));
     measure.properties.emplace_back(std::move(property));
+  } else if (strcmp(param[0], "dump_cg") == 0) {
+    std::unique_ptr<Property> property;
+    property.reset(new Dump_CG(param, num_param, group));
+    measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "dump_beads") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new Dump_Beads(param, num_param));
@@ -519,10 +697,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
   } else if (strcmp(param[0], "dump_polarizability") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new Dump_Polarizability(param, num_param));
-    measure.properties.emplace_back(std::move(property));
-  } else if (strcmp(param[0], "dump_stress") == 0) {
-    std::unique_ptr<Property> property;
-    property.reset(new Dump_Stress(param, num_param));
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "active") == 0) {
     std::unique_ptr<Property> property;
@@ -594,10 +768,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "deform") == 0) {
     integrate.parse_deform(param, num_param);
-  } else if (strcmp(param[0], "compute_chunk") == 0) {
-    std::unique_ptr<Property> property;
-    property.reset(new ComputeChunk(param, num_param, box));
-    measure.properties.emplace_back(std::move(property));
   } else if (strcmp(param[0], "compute") == 0) {
     std::unique_ptr<Property> property;
     property.reset(new Compute(param, num_param, group));
@@ -612,6 +782,8 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     add_random_force.parse(param, num_param, atom.number_of_atoms);
   } else if (strcmp(param[0], "add_force") == 0) {
     add_force.parse(param, num_param, group);
+  } else if (strcmp(param[0], "add_spring") == 0) {
+    add_spring.parse(param, num_param, group, atom);
   } else if (strcmp(param[0], "add_efield") == 0) {
     add_efield.parse(param, num_param, group);
   } else if (strcmp(param[0], "mc") == 0) {
@@ -624,24 +796,6 @@ void Run::parse_one_keyword(std::vector<std::string>& tokens)
     std::unique_ptr<Property> property;
     property.reset(new LSQT(param, num_param));
     measure.properties.emplace_back(std::move(property));
-  } else if (strcmp(param[0], "aqsShear") == 0) {
-    AQSShear aqs_shear;
-    aqs_shear.parse(param, num_param);
-    aqs_shear.compute(
-      force,
-      box,
-      atom.position_per_atom,
-      atom.type,
-      group,
-      atom.potential_per_atom,
-      atom.force_per_atom,
-      atom.virial_per_atom);
-  } else if (strcmp(param[0], "shear") == 0) {
-    integrate.parse_shear(param, num_param);
-  } else if (strcmp(param[0], "kmc_diffusion") == 0) {
-    KMCDiffusion kmc;
-    kmc.parse(param, num_param);
-    kmc.compute();
   } else if (strcmp(param[0], "run") == 0) {
     parse_run(param, num_param);
   } else {
@@ -753,6 +907,12 @@ void Run::parse_run(const char** param, int num_param)
     PRINT_INPUT_ERROR("number of steps should be an integer.\n");
   }
   printf("Run %d steps.\n", number_of_steps);
+
+  // Skip execution if in MDI mode (MDI will control stepping)
+  if (skip_run_commands) {
+    printf("  (skipping run execution in MDI mode)\n");
+    return;
+  }
 
   // set target temperature for temperature-dependent NEP
   force.temperature = integrate.temperature1;
